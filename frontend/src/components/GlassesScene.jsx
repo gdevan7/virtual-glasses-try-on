@@ -1,39 +1,78 @@
 import {useEffect,useRef} from "react";
 import * as THREE from "three";
 
-function roundedRect(w,h,r){
-  const s=new THREE.Shape(),x=-w/2,y=-h/2;
-  s.moveTo(x+r,y);s.lineTo(x+w-r,y);s.quadraticCurveTo(x+w,y,x+w,y+r);
-  s.lineTo(x+w,y+h-r);s.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
-  s.lineTo(x+r,y+h);s.quadraticCurveTo(x,y+h,x,y+h-r);
-  s.lineTo(x,y+r);s.quadraticCurveTo(x,y,x+r,y);return s;
+function lensOutline(style){
+  // Normalized contours for recognizable optical frames; all dimensions are in local frame units.
+  if(style==="round") return [
+    [-.30,-.16],[-.29,-.25],[-.23,-.31],[-.12,-.33],[.08,-.33],[.22,-.29],[.29,-.20],[.30,-.04],[.27,.18],[.20,.28],[.08,.32],[-.10,.32],[-.23,.27],[-.29,.16]
+  ];
+  if(style==="amber") return [
+    [-.31,-.20],[-.25,-.29],[-.10,-.32],[.10,-.31],[.25,-.25],[.30,-.12],[.29,.16],[.23,.27],[.10,.31],[-.11,.30],[-.25,.23],[-.30,.06]
+  ];
+  return [
+    [-.30,-.18],[-.25,-.27],[-.12,-.30],[.10,-.30],[.25,-.25],[.30,-.14],[.29,.14],[.24,.25],[.11,.29],[-.12,.29],[-.25,.23],[-.30,.08]
+  ];
+}
+function contourShape(points){
+  const curve=new THREE.SplineCurve(points.map(([x,y])=>new THREE.Vector2(x,y)));
+  return curve.getPoints(96);
 }
 function makeFrame(style,color){
   const group=new THREE.Group();
-  const frameMat=new THREE.MeshStandardMaterial({color,metalness:style==="round"?.65:.18,roughness:.3});
-  const lensMat=new THREE.MeshPhysicalMaterial({color:"#cfe5ff",transparent:true,opacity:.1,roughness:.18,side:THREE.DoubleSide,depthWrite:false});
-  const round=style==="round",w=round?.39:.45,h=round?.38:.32,r=round?.19:.075;
+  const round=style==="round",amber=style==="amber";
+  const frameMat=new THREE.MeshStandardMaterial({
+    color, metalness:round?.72:(amber?.18:.12), roughness:round?.28:.32
+  });
+  const lensMat=new THREE.MeshPhysicalMaterial({
+    color:"#dcecff", transparent:true, opacity:.075, roughness:.16,
+    metalness:0, side:THREE.DoubleSide, depthWrite:false
+  });
+  const points=lensOutline(style);
+  const width=round?.38:.43;
+  const lensGap=.055;
   for(const side of [-1,1]){
-    const lensShape=roundedRect(w,h,r);
-    const outline=lensShape.getPoints(64).map(p=>new THREE.Vector3(p.x+side*.47,p.y,.025));
-    outline.push(outline[0].clone());
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(outline),96,round?.018:.023,8,false),frameMat));
+    const local=contourShape(points);
+    const cx=side*(width/2+lensGap/2);
+    const vertices=local.map(p=>new THREE.Vector3(p.x+cx,p.y,0));
+    const closed=[...vertices,vertices[0].clone()];
+    const rail=new THREE.CatmullRomCurve3(closed,true,"centripetal");
+    const thickness=round?.014:(amber?.025:.022);
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(rail,128,thickness,10,true),frameMat));
+    const lensShape=new THREE.Shape();
+    local.forEach((p,i)=>i===0?lensShape.moveTo(p.x+cx,p.y):lensShape.lineTo(p.x+cx,p.y));
+    lensShape.closePath();
     const lens=new THREE.Mesh(new THREE.ShapeGeometry(lensShape,32),lensMat);
-    lens.position.set(side*.47,0,.005);group.add(lens);
-    const templeCurve=new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side*.91,.015,.02),new THREE.Vector3(side*1.00,.01,-.10),
-      new THREE.Vector3(side*1.03,-.005,-.36),new THREE.Vector3(side*.98,-.025,-.55)
+    lens.position.z=-.006;group.add(lens);
+    // Hinges are joined to a tapered, swept-back temple instead of detached line segments.
+    const hingeX=cx+side*.215;
+    const hinge=new THREE.Mesh(new THREE.SphereGeometry(.022,16,10),frameMat);
+    hinge.position.set(hingeX,.015,.005);group.add(hinge);
+    const temple=new THREE.CatmullRomCurve3([
+      new THREE.Vector3(hingeX,.015,.005),
+      new THREE.Vector3(hingeX+side*.035,.025,-.06),
+      new THREE.Vector3(hingeX+side*.045,.005,-.25),
+      new THREE.Vector3(hingeX+side*.005,-.045,-.47),
+      new THREE.Vector3(hingeX-side*.025,-.065,-.52)
     ]);
-    group.add(new THREE.Mesh(new THREE.TubeGeometry(templeCurve,24,.014,8,false),frameMat));
-    const hinge=new THREE.Mesh(new THREE.SphereGeometry(.028,12,8),frameMat);
-    hinge.position.set(side*.91,.015,.02);group.add(hinge);
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(temple,36,round?.012:.016,8,false),frameMat));
   }
-  const bridgeCurve=new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-.10,.035,.03),new THREE.Vector3(-.055,-.005,.055),
-    new THREE.Vector3(0,-.025,.06),new THREE.Vector3(.055,-.005,.055),
-    new THREE.Vector3(.10,.035,.03)
+  // Anatomically compact saddle bridge with two small nose-pad arms.
+  const bridge=new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-.075,.055,.012),new THREE.Vector3(-.045,.018,.035),
+    new THREE.Vector3(-.022,-.012,.045),new THREE.Vector3(.022,-.012,.045),
+    new THREE.Vector3(.045,.018,.035),new THREE.Vector3(.075,.055,.012)
   ]);
-  group.add(new THREE.Mesh(new THREE.TubeGeometry(bridgeCurve,24,.022,8,false),frameMat));
+  group.add(new THREE.Mesh(new THREE.TubeGeometry(bridge,32,.018,10,false),frameMat));
+  for(const side of [-1,1]){
+    const arm=new THREE.CatmullRomCurve3([
+      new THREE.Vector3(side*.055,-.005,.025),
+      new THREE.Vector3(side*.085,-.035,.04),
+      new THREE.Vector3(side*.11,-.055,.03)
+    ]);
+    group.add(new THREE.Mesh(new THREE.TubeGeometry(arm,12,.008,8,false),frameMat));
+    const pad=new THREE.Mesh(new THREE.SphereGeometry(.023,12,8),new THREE.MeshStandardMaterial({color:"#b8c1cc",roughness:.4}));
+    pad.position.set(side*.11,-.058,.03);pad.scale.set(.7,1.2,.45);group.add(pad);
+  }
   return group;
 }
 export default function GlassesScene({glasses,landmarks,enabled}){

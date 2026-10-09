@@ -11,7 +11,7 @@ function roundedRect(w,h,r){
 function makeFrame(style,color){
   const group=new THREE.Group();
   const frameMat=new THREE.MeshStandardMaterial({color,metalness:style==="round"?.65:.18,roughness:.3});
-  const lensMat=new THREE.MeshPhysicalMaterial({color:"#cfe5ff",transparent:true,opacity:.13,roughness:.18,side:THREE.DoubleSide,depthWrite:false});
+  const lensMat=new THREE.MeshPhysicalMaterial({color:"#cfe5ff",transparent:true,opacity:.1,roughness:.18,side:THREE.DoubleSide,depthWrite:false});
   const round=style==="round",w=round?.39:.45,h=round?.38:.32,r=round?.19:.075;
   for(const side of [-1,1]){
     const lensShape=roundedRect(w,h,r);
@@ -20,12 +20,9 @@ function makeFrame(style,color){
     group.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(outline),96,round?.018:.023,8,false),frameMat));
     const lens=new THREE.Mesh(new THREE.ShapeGeometry(lensShape,32),lensMat);
     lens.position.set(side*.47,0,.005);group.add(lens);
-    // Temples extend backwards from the hinges, into the scene, rather than out past the lenses.
     const templeCurve=new THREE.CatmullRomCurve3([
-      new THREE.Vector3(side*.91,.015,.02),
-      new THREE.Vector3(side*1.00,.01,-.10),
-      new THREE.Vector3(side*1.03,-.005,-.36),
-      new THREE.Vector3(side*.98,-.025,-.55)
+      new THREE.Vector3(side*.91,.015,.02),new THREE.Vector3(side*1.00,.01,-.10),
+      new THREE.Vector3(side*1.03,-.005,-.36),new THREE.Vector3(side*.98,-.025,-.55)
     ]);
     group.add(new THREE.Mesh(new THREE.TubeGeometry(templeCurve,24,.014,8,false),frameMat));
     const hinge=new THREE.Mesh(new THREE.SphereGeometry(.028,12,8),frameMat);
@@ -58,16 +55,35 @@ export default function GlassesScene({glasses,landmarks,enabled}){
       if(k!==key){disposeModel();model=s.glasses?makeFrame(s.glasses.style,s.glasses.frame_color):null;if(model)root.add(model);key=k;}
       root.visible=Boolean(s.enabled&&s.landmarks&&model);
       if(root.visible){
-        const lm=s.landmarks,l=lm[33],r=lm[263],n=lm[168];
-        if(l&&r&&n){
-          const cx=(l.x+r.x)/2,cy=(l.y+r.y)/2,d=Math.hypot(r.x-l.x,r.y-l.y);
-          root.position.lerp(new THREE.Vector3((.5-cx)*3.7,(.5-cy)*2.6,0),.4);
-          // Previous scale was too small: scale the frame relative to the detected eye distance.
-          const sc=THREE.MathUtils.clamp(d*5.1,.7,1.8);
-          root.scale.lerp(new THREE.Vector3(sc,sc,sc),.3);
-          root.rotation.z=THREE.MathUtils.lerp(root.rotation.z,-Math.atan2(r.y-l.y,r.x-l.x),.3);
-          const yaw=THREE.MathUtils.clamp((n.x-cx)/Math.max(d,.001),-.45,.45);
-          root.rotation.y=THREE.MathUtils.lerp(root.rotation.y,yaw,.25);
+        const lm=s.landmarks,l=lm[33],r=lm[263],nose=lm[168];
+        if(l&&r&&nose){
+          const cx=(l.x+r.x)/2,cy=(l.y+r.y)/2;
+          const eyeDistance=Math.hypot(r.x-l.x,r.y-l.y);
+          // Match the CSS mirrored preview and object-fit: cover crop.
+          const stageW=el.clientWidth||1,stageH=el.clientHeight||1;
+          const video=el.parentElement?.querySelector("video");
+          const vw=video?.videoWidth||16,vh=video?.videoHeight||9;
+          const coverScale=Math.max(stageW/vw,stageH/vh);
+          const renderedW=vw*coverScale,renderedH=vh*coverScale;
+          const cropX=(renderedW-stageW)/(2*renderedW),cropY=(renderedH-stageH)/(2*renderedH);
+          const nx=(cx-cropX)/(1-2*cropX);
+          const ny=(cy-cropY)/(1-2*cropY);
+          const visibleEyeDistance=eyeDistance/(1-2*cropX);
+          // The model is anchored on the eye midpoint; use eye distance for scale.
+          const worldH=2* Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.position.z;
+          const worldW=worldH*camera.aspect;
+          const targetX=(.5-nx)*worldW;
+          const targetY=(.5-ny)*worldH;
+          root.position.x=THREE.MathUtils.lerp(root.position.x,targetX,.55);
+          root.position.y=THREE.MathUtils.lerp(root.position.y,targetY,.55);
+          const targetScale=THREE.MathUtils.clamp(visibleEyeDistance*worldW/1.9,.48,1.55);
+          root.scale.setScalar(THREE.MathUtils.lerp(root.scale.x,targetScale,.4));
+          // A mirrored canvas reverses the visible roll direction, so use image-space roll directly.
+          const roll=Math.atan2(r.y-l.y,r.x-l.x);
+          root.rotation.z=THREE.MathUtils.lerp(root.rotation.z,roll,.45);
+          // Disable the unstable nose-offset yaw approximation: it made the lenses drift apart.
+          root.rotation.y=THREE.MathUtils.lerp(root.rotation.y,0,.3);
+          root.rotation.x=THREE.MathUtils.lerp(root.rotation.x,0,.3);
         }
       }
       renderer.render(scene,camera);raf=requestAnimationFrame(loop);

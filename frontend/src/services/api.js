@@ -1,0 +1,1 @@
+const BASE=import.meta.env.VITE_API_BASE_URL||"http://localhost:4000"; export async function getGlasses(){const r=await fetch(`${BASE}/api/glasses`);if(!r.ok)throw Error("Catalog unavailable");return(await r.json()).data;}

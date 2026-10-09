@@ -72,14 +72,14 @@ export default function GlassesScene({glasses,landmarks,enabled}){
           // The model is anchored on the eye midpoint; use eye distance for scale.
           const worldH=2* Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*camera.position.z;
           const worldW=worldH*camera.aspect;
-          const targetX=(.5-nx)*worldW;
+          const targetX=(nx-.5)*worldW;
           const targetY=(.5-ny)*worldH;
           root.position.x=THREE.MathUtils.lerp(root.position.x,targetX,.55);
           root.position.y=THREE.MathUtils.lerp(root.position.y,targetY,.55);
           const targetScale=THREE.MathUtils.clamp(visibleEyeDistance*worldW/1.9,.48,1.55);
           root.scale.setScalar(THREE.MathUtils.lerp(root.scale.x,targetScale,.4));
           // A mirrored canvas reverses the visible roll direction, so use image-space roll directly.
-          const roll=Math.atan2(r.y-l.y,r.x-l.x);
+          const roll=-Math.atan2(r.y-l.y,r.x-l.x);
           root.rotation.z=THREE.MathUtils.lerp(root.rotation.z,roll,.45);
           // Disable the unstable nose-offset yaw approximation: it made the lenses drift apart.
           root.rotation.y=THREE.MathUtils.lerp(root.rotation.y,0,.3);

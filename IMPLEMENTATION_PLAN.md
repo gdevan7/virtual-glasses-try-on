@@ -1,0 +1,12 @@
+# Implementation Plan
+- [x] React/Vite frontend and Express backend scaffold
+- [x] Bright UI palette and responsive layout
+- [x] Explicit camera start/stop and MediaPipe integration
+- [x] Three.js procedural 3D frame and three style variants
+- [x] REST catalog API and PostgreSQL schema
+- [x] Docker Compose, screenshot control, and API validation tests
+- [ ] Calibrate pose and frame dimensions on target devices
+- [ ] Replace procedural geometry with licensed GLB models
+- [ ] Run frontend build and backend tests on Node 20+
+- [ ] Validate permission-denied/no-face cases and screenshot composition
+- [ ] Measure FPS/latency and deploy with HTTPS
